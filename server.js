@@ -41,8 +41,6 @@ function saveSettings() {
   writeFileSync(SETTINGS_FILE, JSON.stringify(adminSettings, null, 2), 'utf-8');
 }
 let adminSettings = loadSettings();
-themeInterval = adminSettings.themeInterval || 20;
-themeRotatedAtTurn = adminSettings.themeRotatedAtTurn || 0;
 
 // Token usage tracking (persisted)
 const USAGE_FILE = join(__dirname, 'usage.json');
@@ -62,8 +60,8 @@ const STATE_FILE = join(__dirname, 'state.json');
 const LOG_FILE = join(__dirname, 'patterns.log');
 const HISTORY_SIZE = 8;
 const SUGGESTION_TTL = 3; // turns a suggestion survives
-let themeInterval = 20; // turns between theme changes
-let themeRotatedAtTurn = 0; // turn number when theme was last rotated
+let themeInterval = adminSettings.themeInterval || 20;
+let themeRotatedAtTurn = adminSettings.themeRotatedAtTurn || 0;
 
 const DICTIONARY = JSON.parse(readFileSync(join(__dirname, 'words.json'), 'utf-8'));
 
