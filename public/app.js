@@ -111,11 +111,13 @@ async function updatePattern(code) {
   if (editor.editor) {
     const previousCode = editor.editor.code;
     try {
-      await tryEvaluate(code);
       if (!isPlaying) {
         editor.editor.toggle();
         isPlaying = true;
+        // Small delay to let the audio context initialize before evaluating
+        await new Promise(r => setTimeout(r, 200));
       }
+      await tryEvaluate(code);
     } catch (e) {
       console.warn('Pattern eval failed, reverting:', e.message);
       if (ws && ws.readyState === WebSocket.OPEN) {
