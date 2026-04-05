@@ -66,8 +66,9 @@ let themeRotatedAtTurn = adminSettings.themeRotatedAtTurn || 0;
 const DICTIONARY = JSON.parse(readFileSync(join(__dirname, 'words.json'), 'utf-8'));
 
 function generateTheme() {
+  const count = Math.floor(Math.random() * 5) + 1;
   const words = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < count; i++) {
     words.push(DICTIONARY[Math.floor(Math.random() * DICTIONARY.length)]);
   }
   return words.join(' ');
