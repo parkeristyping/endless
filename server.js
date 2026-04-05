@@ -18,6 +18,7 @@ const anthropic = new Anthropic();
 const PORT = process.env.PORT || 3000;
 const LOOP_INTERVAL = 30_000;
 const SUGGESTIONS_ENABLED = process.env.SUGGESTIONS_ENABLED === 'true';
+const THEME_UI_ENABLED = process.env.THEME_UI_ENABLED === 'true';
 const MAX_SUGGESTIONS = 50;
 const SAMPLE_SIZE = 20;
 const MAX_PATTERN_LENGTH = 1500;
@@ -317,6 +318,7 @@ wss.on('connection', (ws) => {
     theme: currentTheme,
     plan: currentPlan,
     suggestionsEnabled: SUGGESTIONS_ENABLED,
+    themeUiEnabled: THEME_UI_ENABLED,
   }));
 
   if (activeClients === 1) startLoop();

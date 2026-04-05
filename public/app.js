@@ -60,6 +60,10 @@ function connect() {
           const chatPanel = document.getElementById('chat-panel');
           if (chatPanel) chatPanel.style.display = 'none';
         }
+        if (!msg.themeUiEnabled) {
+          const themeSpan = document.getElementById('theme');
+          if (themeSpan) themeSpan.style.display = 'none';
+        }
         break;
       case 'pattern':
         updatePattern(msg.code);
