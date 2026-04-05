@@ -4,22 +4,53 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import Anthropic from '@anthropic-ai/sdk';
 import { parse } from 'acorn';
-import { readFileSync, writeFileSync, appendFileSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.use(express.urlencoded({ extended: true }));
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 const anthropic = new Anthropic();
 
 const PORT = process.env.PORT || 3000;
+const ADMIN_USER = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'admin';
 const LOOP_INTERVAL = 30_000;
-const SUGGESTIONS_ENABLED = process.env.SUGGESTIONS_ENABLED === 'true';
-const THEME_UI_ENABLED = process.env.THEME_UI_ENABLED === 'true';
 const MAX_SUGGESTIONS = 50;
+
+// Admin-togglable settings (persisted)
+const SETTINGS_FILE = join(__dirname, 'settings.json');
+const AVAILABLE_MODELS = {
+  'claude-sonnet-4-20250514': 'Sonnet (balanced)',
+  'claude-opus-4-20250514': 'Opus (best)',
+  'claude-haiku-3-20250709': 'Haiku (cheap)',
+};
+
+function loadSettings() {
+  try {
+    return JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
+  } catch {
+    return { suggestionsEnabled: false, themeUiEnabled: false, model: 'claude-sonnet-4-20250514' };
+  }
+}
+function saveSettings() {
+  writeFileSync(SETTINGS_FILE, JSON.stringify(adminSettings, null, 2), 'utf-8');
+}
+let adminSettings = loadSettings();
+
+// Token usage tracking (persisted)
+const USAGE_FILE = join(__dirname, 'usage.json');
+function loadUsage() {
+  try { return JSON.parse(readFileSync(USAGE_FILE, 'utf-8')); } catch { return {}; }
+}
+function saveUsage() {
+  writeFileSync(USAGE_FILE, JSON.stringify(tokenUsage, null, 2), 'utf-8');
+}
+let tokenUsage = loadUsage(); // { "2026-04-05": { input: N, output: N, requests: N } }
 const SAMPLE_SIZE = 20;
 const MAX_PATTERN_LENGTH = 1500;
 const MAX_PATTERN_LINES = 20;
@@ -244,11 +275,19 @@ async function generateNextPattern() {
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-20250514',
+      model: adminSettings.model || 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages,
     });
+
+    // Track token usage
+    const today = new Date().toISOString().slice(0, 10);
+    if (!tokenUsage[today]) tokenUsage[today] = { input: 0, output: 0, requests: 0 };
+    tokenUsage[today].input += response.usage?.input_tokens || 0;
+    tokenUsage[today].output += response.usage?.output_tokens || 0;
+    tokenUsage[today].requests += 1;
+    saveUsage();
 
     const { plan, code } = parseResponse(response.content[0].text);
 
@@ -317,8 +356,8 @@ wss.on('connection', (ws) => {
     code: currentPattern,
     theme: currentTheme,
     plan: currentPlan,
-    suggestionsEnabled: SUGGESTIONS_ENABLED,
-    themeUiEnabled: THEME_UI_ENABLED,
+    suggestionsEnabled: adminSettings.suggestionsEnabled,
+    themeUiEnabled: adminSettings.themeUiEnabled,
   }));
 
   if (activeClients === 1) startLoop();
@@ -331,7 +370,7 @@ wss.on('connection', (ws) => {
         console.log(`[${new Date().toISOString()}] Client eval error: ${msg.error}`);
       } else if (msg.type === 'suggestion' && typeof msg.text === 'string') {
         const text = msg.text.trim().slice(0, 280);
-        if (SUGGESTIONS_ENABLED && text.length > 0 && pendingSuggestions.length < MAX_SUGGESTIONS) {
+        if (adminSettings.suggestionsEnabled && text.length > 0 && pendingSuggestions.length < MAX_SUGGESTIONS) {
           pendingSuggestions.push({ text, turnsLeft: SUGGESTION_TTL });
         }
       }
@@ -343,6 +382,99 @@ wss.on('connection', (ws) => {
     console.log(`Client disconnected (${activeClients} active)`);
     if (activeClients === 0) stopLoop();
   });
+});
+
+// Admin auth middleware
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Basic ')) {
+    const [user, pass] = Buffer.from(auth.slice(6), 'base64').toString().split(':');
+    if (user === ADMIN_USER && pass === ADMIN_PASS) return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="Endless Admin"');
+  res.status(401).send('Unauthorized');
+}
+
+// Admin page
+app.get('/admin', requireAuth, (req, res) => {
+  // Last 7 days usage
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const u = tokenUsage[d] || { input: 0, output: 0, requests: 0 };
+    days.push({ date: d, ...u, total: u.input + u.output });
+  }
+
+  const modelOptions = Object.entries(AVAILABLE_MODELS).map(([id, label]) =>
+    `<option value="${id}" ${adminSettings.model === id ? 'selected' : ''}>${label}</option>`
+  ).join('');
+
+  res.send(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>endless admin</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; background: #111; color: #eee; padding: 20px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 20px; }
+  h2 { font-size: 16px; color: #aaa; margin: 24px 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #333; }
+  th { color: #888; font-weight: 500; }
+  td:first-child, th:first-child { text-align: left; }
+  .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  label { display: flex; align-items: center; gap: 10px; color: #ccc; font-size: 14px; margin-bottom: 12px; }
+  select { background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; font-size: 14px; }
+  button { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  button:hover { background: #444; }
+  .toggle { width: 18px; height: 18px; }
+  .stat { color: #4f9; font-size: 24px; font-weight: 600; }
+  .stat-label { color: #888; font-size: 12px; }
+  .stats-row { display: flex; gap: 24px; margin-bottom: 16px; }
+  .stats-row > div { flex: 1; }
+</style>
+</head><body>
+<h1>🎵 endless admin</h1>
+
+<div class="card">
+  <h2 style="margin-top:0">Settings</h2>
+  <form method="POST" action="/admin/settings">
+    <label>
+      <select name="model">${modelOptions}</select>
+      Model
+    </label>
+    <label><input type="checkbox" name="suggestionsEnabled" class="toggle" ${adminSettings.suggestionsEnabled ? 'checked' : ''}> Suggestions</label>
+    <label><input type="checkbox" name="themeUiEnabled" class="toggle" ${adminSettings.themeUiEnabled ? 'checked' : ''}> Theme UI</label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Status</h2>
+  <div class="stats-row">
+    <div><div class="stat">${activeClients}</div><div class="stat-label">Connected</div></div>
+    <div><div class="stat">${turnNumber}</div><div class="stat-label">Turns</div></div>
+    <div><div class="stat">${adminSettings.model?.split('-')[1] || '?'}</div><div class="stat-label">Model</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Token Usage (7 days)</h2>
+  <table>
+    <tr><th>Date</th><th>Requests</th><th>Input</th><th>Output</th><th>Total</th></tr>
+    ${days.map(d => `<tr><td>${d.date}</td><td>${d.requests.toLocaleString()}</td><td>${d.input.toLocaleString()}</td><td>${d.output.toLocaleString()}</td><td>${d.total.toLocaleString()}</td></tr>`).join('')}
+    <tr style="border-top:2px solid #555;font-weight:600"><td>Total</td><td>${days.reduce((s,d)=>s+d.requests,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.input,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.output,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.total,0).toLocaleString()}</td></tr>
+  </table>
+</div>
+
+</body></html>`);
+});
+
+// Admin settings update
+app.post('/admin/settings', requireAuth, (req, res) => {
+  adminSettings.model = req.body.model || adminSettings.model;
+  adminSettings.suggestionsEnabled = req.body.suggestionsEnabled === 'on';
+  adminSettings.themeUiEnabled = req.body.themeUiEnabled === 'on';
+  saveSettings();
+  res.redirect('/admin');
 });
 
 // Serve static files
