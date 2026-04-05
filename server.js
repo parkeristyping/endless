@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import Anthropic from '@anthropic-ai/sdk';
 import { parse } from 'acorn';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -24,6 +24,7 @@ const MAX_PATTERN_LINES = 20;
 const MAX_NESTING_DEPTH = 6;
 
 const STATE_FILE = join(__dirname, 'state.json');
+const LOG_FILE = join(__dirname, 'patterns.log');
 const HISTORY_SIZE = 8;
 const SUGGESTION_TTL = 3; // turns a suggestion survives
 const THEME_INTERVAL = 20; // turns between theme changes
@@ -61,6 +62,11 @@ function saveState() {
     history: turnHistory,
     theme: currentTheme,
   }, null, 2), 'utf-8');
+}
+
+function logPattern(turn, plan, code, theme) {
+  const entry = `\n--- Turn ${turn} | ${new Date().toISOString()} | Theme: "${theme}" ---\nPlan: ${plan}\n\n${code}\n`;
+  appendFileSync(LOG_FILE, entry, 'utf-8');
 }
 
 const saved = loadState();
@@ -273,6 +279,7 @@ async function generateNextPattern() {
       }
 
       saveState();
+      logPattern(turnNumber, currentPlan, currentPattern, currentTheme);
       console.log(`[${new Date().toISOString()}] Turn ${turnNumber} — pattern updated (theme: "${currentTheme}", plan: ${plan.slice(0, 60)}...)`);
       broadcast('pattern', { code: currentPattern, theme: currentTheme, plan: currentPlan });
     } else {
