@@ -457,6 +457,26 @@ app.get('/admin', requireAuth, (req, res) => {
 </div>
 
 <div class="card">
+  <h2 style="margin-top:0">Current Theme</h2>
+  <p style="font-size:18px;color:#f0c040;margin:0">"${currentTheme}"</p>
+  <p style="font-size:12px;color:#666;margin-top:8px">Changes every ${THEME_INTERVAL} turns (${THEME_INTERVAL - (turnNumber % THEME_INTERVAL)} turns remaining)</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Plan</h2>
+  <p style="font-size:13px;color:#aaa;margin:0;font-style:italic">${currentPlan || '(none yet)'}</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Send Suggestion</h2>
+  <form method="POST" action="/admin/suggest" style="display:flex;gap:8px">
+    <input type="text" name="text" placeholder="e.g. make it more jazzy..." maxlength="280" style="flex:1;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:8px 12px;font-size:14px">
+    <button type="submit">Send</button>
+  </form>
+  <p style="font-size:12px;color:#666;margin-top:8px">${pendingSuggestions.length} pending suggestion${pendingSuggestions.length !== 1 ? 's' : ''}</p>
+</div>
+
+<div class="card">
   <h2 style="margin-top:0">Token Usage (7 days)</h2>
   <table>
     <tr><th>Date</th><th>Requests</th><th>Input</th><th>Output</th><th>Total</th></tr>
@@ -466,6 +486,15 @@ app.get('/admin', requireAuth, (req, res) => {
 </div>
 
 </body></html>`);
+});
+
+// Admin suggestion (always works regardless of public toggle)
+app.post('/admin/suggest', requireAuth, (req, res) => {
+  const text = (req.body.text || '').trim().slice(0, 280);
+  if (text.length > 0 && pendingSuggestions.length < MAX_SUGGESTIONS) {
+    pendingSuggestions.push({ text, turnsLeft: SUGGESTION_TTL });
+  }
+  res.redirect('/admin');
 });
 
 // Admin settings update
