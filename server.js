@@ -281,12 +281,14 @@ async function generateNextPattern() {
       messages,
     });
 
-    // Track token usage
+    // Track token usage by model
     const today = new Date().toISOString().slice(0, 10);
-    if (!tokenUsage[today]) tokenUsage[today] = { input: 0, output: 0, requests: 0 };
-    tokenUsage[today].input += response.usage?.input_tokens || 0;
-    tokenUsage[today].output += response.usage?.output_tokens || 0;
-    tokenUsage[today].requests += 1;
+    const usedModel = adminSettings.model || 'claude-sonnet-4-20250514';
+    if (!tokenUsage[today]) tokenUsage[today] = {};
+    if (!tokenUsage[today][usedModel]) tokenUsage[today][usedModel] = { input: 0, output: 0, requests: 0 };
+    tokenUsage[today][usedModel].input += response.usage?.input_tokens || 0;
+    tokenUsage[today][usedModel].output += response.usage?.output_tokens || 0;
+    tokenUsage[today][usedModel].requests += 1;
     saveUsage();
 
     const { plan, code } = parseResponse(response.content[0].text);
@@ -397,12 +399,43 @@ function requireAuth(req, res, next) {
 
 // Admin page
 app.get('/admin', requireAuth, (req, res) => {
-  // Last 7 days usage
-  const days = [];
+  // Pricing per million tokens
+  const PRICING = {
+    'claude-sonnet-4-20250514': { input: 3, output: 15 },
+    'claude-opus-4-20250514': { input: 15, output: 75 },
+    'claude-haiku-3-20250709': { input: 0.25, output: 1.25 },
+  };
+  function modelShort(m) {
+    if (m.includes('opus')) return 'Opus';
+    if (m.includes('sonnet')) return 'Sonnet';
+    if (m.includes('haiku')) return 'Haiku';
+    return m;
+  }
+  function estimateCost(model, input, output) {
+    const p = PRICING[model] || PRICING['claude-sonnet-4-20250514'];
+    return (input / 1_000_000) * p.input + (output / 1_000_000) * p.output;
+  }
+
+  // Last 7 days usage — flatten by day+model
+  const rows = [];
+  let totalInput = 0, totalOutput = 0, totalRequests = 0, totalCost = 0;
   for (let i = 6; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-    const u = tokenUsage[d] || { input: 0, output: 0, requests: 0 };
-    days.push({ date: d, ...u, total: u.input + u.output });
+    const dayData = tokenUsage[d];
+    if (!dayData) continue;
+    // Handle both old format {input,output,requests} and new {model: {input,output,requests}}
+    if (dayData.input !== undefined) {
+      // Old format — assume sonnet
+      const cost = estimateCost('claude-sonnet-4-20250514', dayData.input, dayData.output);
+      rows.push({ date: d, model: 'Sonnet', requests: dayData.requests, input: dayData.input, output: dayData.output, cost });
+      totalInput += dayData.input; totalOutput += dayData.output; totalRequests += dayData.requests; totalCost += cost;
+    } else {
+      for (const [model, u] of Object.entries(dayData)) {
+        const cost = estimateCost(model, u.input, u.output);
+        rows.push({ date: d, model: modelShort(model), requests: u.requests, input: u.input, output: u.output, cost });
+        totalInput += u.input; totalOutput += u.output; totalRequests += u.requests; totalCost += cost;
+      }
+    }
   }
 
   const modelOptions = Object.entries(AVAILABLE_MODELS).map(([id, label]) =>
@@ -479,9 +512,10 @@ app.get('/admin', requireAuth, (req, res) => {
 <div class="card">
   <h2 style="margin-top:0">Token Usage (7 days)</h2>
   <table>
-    <tr><th>Date</th><th>Requests</th><th>Input</th><th>Output</th><th>Total</th></tr>
-    ${days.map(d => `<tr><td>${d.date}</td><td>${d.requests.toLocaleString()}</td><td>${d.input.toLocaleString()}</td><td>${d.output.toLocaleString()}</td><td>${d.total.toLocaleString()}</td></tr>`).join('')}
-    <tr style="border-top:2px solid #555;font-weight:600"><td>Total</td><td>${days.reduce((s,d)=>s+d.requests,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.input,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.output,0).toLocaleString()}</td><td>${days.reduce((s,d)=>s+d.total,0).toLocaleString()}</td></tr>
+    <tr><th>Date</th><th>Model</th><th>Reqs</th><th>Input</th><th>Output</th><th>Cost</th></tr>
+    ${rows.map(r => `<tr><td>${r.date}</td><td>${r.model}</td><td>${r.requests.toLocaleString()}</td><td>${r.input.toLocaleString()}</td><td>${r.output.toLocaleString()}</td><td>$${r.cost.toFixed(4)}</td></tr>`).join('')}
+    ${rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#666">No usage yet</td></tr>' : ''}
+    <tr style="border-top:2px solid #555;font-weight:600"><td>Total</td><td></td><td>${totalRequests.toLocaleString()}</td><td>${totalInput.toLocaleString()}</td><td>${totalOutput.toLocaleString()}</td><td>$${totalCost.toFixed(4)}</td></tr>
   </table>
 </div>
 
