@@ -478,7 +478,6 @@ app.get('/admin', requireAuth, (req, res) => {
   <h2 style="margin-top:0">Status</h2>
   <div class="stats-row">
     <div><div class="stat">${activeClients}</div><div class="stat-label">Connected</div></div>
-    <div><div class="stat">${turnNumber}</div><div class="stat-label">Turns</div></div>
     <div><div class="stat">${adminSettings.model?.split('-')[1] || '?'}</div><div class="stat-label">Model</div></div>
   </div>
 </div>
@@ -506,7 +505,7 @@ app.get('/admin', requireAuth, (req, res) => {
 <div class="card">
   <h2 style="margin-top:0">Token Usage (7 days)</h2>
   <table>
-    <tr><th>Date</th><th>Model</th><th>Reqs</th><th>Input</th><th>Output</th><th>Cost</th></tr>
+    <tr><th>Date</th><th>Model</th><th>Turns</th><th>Input</th><th>Output</th><th>Cost</th></tr>
     ${rows.map(r => `<tr><td>${r.date}</td><td>${r.model}</td><td>${r.requests.toLocaleString()}</td><td>${r.input.toLocaleString()}</td><td>${r.output.toLocaleString()}</td><td>$${r.cost.toFixed(4)}</td></tr>`).join('')}
     ${rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#666">No usage yet</td></tr>' : ''}
     <tr style="border-top:2px solid #555;font-weight:600"><td>Total</td><td></td><td>${totalRequests.toLocaleString()}</td><td>${totalInput.toLocaleString()}</td><td>${totalOutput.toLocaleString()}</td><td>$${totalCost.toFixed(4)}</td></tr>

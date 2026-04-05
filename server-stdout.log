@@ -361,3 +361,10 @@ Client connected (1 active)
 Starting LLM loop (active clients connected)
 [2026-04-05T15:57:09.305Z] Turn 77 — pattern updated (theme: "pride years elements murder bluff", plan: With the theme changing in 4 turns, I'll build to a climacti...)
 [2026-04-05T15:57:39.085Z] Turn 78 — pattern updated (theme: "pride years elements murder bluff", plan: With just 3 turns left on this dark theme, I'll intensify ev...)
+Endless Song running at http://localhost:8768
+Endless Song running at http://localhost:8768
+Client connected (1 active)
+Starting LLM loop (active clients connected)
+[2026-04-05T15:58:46.699Z] Turn 9 — pattern updated (theme: "pride years elements murder bluff", plan: I'll start pulling back from the intense climax to begin tra...)
+Client disconnected (0 active)
+Stopping LLM loop (no active clients)

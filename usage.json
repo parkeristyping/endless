@@ -4,9 +4,9 @@
     "output": 2806,
     "requests": 7,
     "claude-sonnet-4-20250514": {
-      "input": 19293,
-      "output": 1185,
-      "requests": 3
+      "input": 25366,
+      "output": 1540,
+      "requests": 4
     },
     "claude-opus-4-20250514": {
       "input": 487267,
