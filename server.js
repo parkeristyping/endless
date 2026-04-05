@@ -17,6 +17,7 @@ const anthropic = new Anthropic();
 
 const PORT = process.env.PORT || 3000;
 const LOOP_INTERVAL = 30_000;
+const SUGGESTIONS_ENABLED = process.env.SUGGESTIONS_ENABLED === 'true';
 const MAX_SUGGESTIONS = 50;
 const SAMPLE_SIZE = 20;
 const MAX_PATTERN_LENGTH = 1500;
@@ -315,6 +316,7 @@ wss.on('connection', (ws) => {
     code: currentPattern,
     theme: currentTheme,
     plan: currentPlan,
+    suggestionsEnabled: SUGGESTIONS_ENABLED,
   }));
 
   if (activeClients === 1) startLoop();
@@ -327,7 +329,7 @@ wss.on('connection', (ws) => {
         console.log(`[${new Date().toISOString()}] Client eval error: ${msg.error}`);
       } else if (msg.type === 'suggestion' && typeof msg.text === 'string') {
         const text = msg.text.trim().slice(0, 280);
-        if (text.length > 0 && pendingSuggestions.length < MAX_SUGGESTIONS) {
+        if (SUGGESTIONS_ENABLED && text.length > 0 && pendingSuggestions.length < MAX_SUGGESTIONS) {
           pendingSuggestions.push({ text, turnsLeft: SUGGESTION_TTL });
         }
       }

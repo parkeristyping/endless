@@ -56,6 +56,10 @@ function connect() {
         updatePattern(msg.code);
         if (msg.theme) themeEl.textContent = msg.theme;
         if (msg.plan) planTextEl.textContent = msg.plan;
+        if (!msg.suggestionsEnabled) {
+          const chatPanel = document.getElementById('chat-panel');
+          if (chatPanel) chatPanel.style.display = 'none';
+        }
         break;
       case 'pattern':
         updatePattern(msg.code);
