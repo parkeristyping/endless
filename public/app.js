@@ -9,17 +9,30 @@ const appEl = document.getElementById('app');
 
 let ws;
 let started = false;
+let isPlaying = false;
 let pendingCode = null;
 
-function startAudio() {
+function waitForEditor() {
+  return new Promise((resolve) => {
+    function check() {
+      if (editor && editor.editor) resolve();
+      else setTimeout(check, 200);
+    }
+    check();
+  });
+}
+
+async function startAudio() {
   if (started) return;
   started = true;
   splash.classList.add('hidden');
   appEl.classList.remove('hidden');
 
+  await waitForEditor();
+
   // If we received a pattern before the user clicked, apply it now
   if (pendingCode) {
-    updatePattern(pendingCode);
+    await updatePattern(pendingCode);
     pendingCode = null;
   }
 }
@@ -61,7 +74,23 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
-function updatePattern(code) {
+async function tryEvaluate(code, retries = 3) {
+  editor.editor.setCode(code);
+  for (let i = 0; i < retries; i++) {
+    try {
+      await editor.editor.evaluate();
+      return true;
+    } catch (e) {
+      if (i < retries - 1) {
+        await new Promise(r => setTimeout(r, 1000));
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
+async function updatePattern(code) {
   // If user hasn't clicked to start yet, queue the pattern
   if (!started) {
     pendingCode = code;
@@ -73,19 +102,19 @@ function updatePattern(code) {
   // Wait for strudel-editor to be ready
   if (editor.editor) {
     const previousCode = editor.editor.code;
-    editor.editor.setCode(code);
     try {
-      editor.editor.evaluate();
-      editor.editor.start();
+      await tryEvaluate(code);
+      if (!isPlaying) {
+        editor.editor.toggle();
+        isPlaying = true;
+      }
     } catch (e) {
       console.warn('Pattern eval failed, reverting:', e.message);
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'eval_error', error: e.message, code }));
       }
       if (previousCode) {
-        editor.editor.setCode(previousCode);
-        editor.editor.evaluate();
-        editor.editor.start();
+        await tryEvaluate(previousCode).catch(() => {});
       }
     }
   } else {

@@ -19,18 +19,16 @@ const PORT = process.env.PORT || 3000;
 const LOOP_INTERVAL = 30_000;
 const MAX_SUGGESTIONS = 50;
 const SAMPLE_SIZE = 20;
-const MAX_PATTERN_LENGTH = 1000;
-const MAX_PATTERN_LINES = 15;
-const MAX_NESTING_DEPTH = 4;
+const MAX_PATTERN_LENGTH = 1500;
+const MAX_PATTERN_LINES = 20;
+const MAX_NESTING_DEPTH = 6;
 
 const STATE_FILE = join(__dirname, 'state.json');
 const HISTORY_SIZE = 8;
 const SUGGESTION_TTL = 3; // turns a suggestion survives
 const THEME_INTERVAL = 20; // turns between theme changes
 
-const DICTIONARY = readFileSync('/usr/share/dict/words', 'utf-8')
-  .split('\n')
-  .filter(w => w.length >= 4 && w.length <= 10 && /^[a-z]+$/.test(w));
+const DICTIONARY = JSON.parse(readFileSync(join(__dirname, 'words.json'), 'utf-8'));
 
 function generateTheme() {
   const words = [];
@@ -94,11 +92,10 @@ the strudel pattern here
 
 RULES:
 - Evolve the pattern GRADUALLY - change 1-2 things at a time, don't rewrite everything.
-- SIMPLICITY IS KEY. Prefer clear, minimal patterns over dense layered ones.
-- Maximum 2-3 voices/layers at a time. If the pattern has more, REMOVE some before adding.
+- Maximum 6 voices/layers at a time. If the pattern has more, REMOVE some before adding.
 - When evolving, consider REMOVING or REPLACING elements — not just adding. Subtraction is musical.
 - Favor slow evolution: change a note, swap a sound, adjust a filter. Not everything at once.
-- Keep patterns under 12 lines and under 800 characters.
+- Keep patterns under 18 lines and under 1200 characters.
 - Use Strudel functions: note(), s(), stack(), cat(), seq(), .jux(), .rev(), .slow(), .fast(), .lpf(), .hpf(), .gain(), .delay(), .room(), .pan(), .struct(), .euclid(), .sometimes(), .every(), etc.
 - Available sounds include: piano, sawtooth, sine, square, triangle, bd, sd, hh, cp, oh, cr, cy, tom, rim, click, noise
 - Mini-notation patterns go in quotes: "c3 e3 g3", "bd sd", "<c3 e3 g3>/4"
@@ -190,7 +187,7 @@ function buildMessages() {
 
   // Current turn
   const complexity = getComplexity(currentPattern);
-  const isComplex = complexity.lines > 10 || complexity.chars > 600 || complexity.stacks > 2;
+  const isComplex = complexity.lines > 15 || complexity.chars > 1000 || complexity.stacks > 3;
 
   const turnsUntilThemeChange = THEME_INTERVAL - (turnNumber % THEME_INTERVAL);
 
