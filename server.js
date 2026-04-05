@@ -423,18 +423,12 @@ app.get('/admin', requireAuth, (req, res) => {
     const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
     const dayData = tokenUsage[d];
     if (!dayData) continue;
-    // Handle both old format {input,output,requests} and new {model: {input,output,requests}}
-    if (dayData.input !== undefined) {
-      // Old format — assume sonnet
-      const cost = estimateCost('claude-sonnet-4-20250514', dayData.input, dayData.output);
-      rows.push({ date: d, model: 'Sonnet', requests: dayData.requests, input: dayData.input, output: dayData.output, cost });
-      totalInput += dayData.input; totalOutput += dayData.output; totalRequests += dayData.requests; totalCost += cost;
-    } else {
-      for (const [model, u] of Object.entries(dayData)) {
-        const cost = estimateCost(model, u.input, u.output);
-        rows.push({ date: d, model: modelShort(model), requests: u.requests, input: u.input, output: u.output, cost });
-        totalInput += u.input; totalOutput += u.output; totalRequests += u.requests; totalCost += cost;
-      }
+    for (const [key, u] of Object.entries(dayData)) {
+      // Skip flat legacy fields (input, output, requests) — only process model-keyed entries
+      if (typeof u !== 'object' || u === null) continue;
+      const cost = estimateCost(key, u.input, u.output);
+      rows.push({ date: d, model: modelShort(key), requests: u.requests, input: u.input, output: u.output, cost });
+      totalInput += u.input; totalOutput += u.output; totalRequests += u.requests; totalCost += cost;
     }
   }
 
