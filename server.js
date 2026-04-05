@@ -41,6 +41,8 @@ function saveSettings() {
   writeFileSync(SETTINGS_FILE, JSON.stringify(adminSettings, null, 2), 'utf-8');
 }
 let adminSettings = loadSettings();
+themeInterval = adminSettings.themeInterval || 20;
+themeRotatedAtTurn = adminSettings.themeRotatedAtTurn || 0;
 
 // Token usage tracking (persisted)
 const USAGE_FILE = join(__dirname, 'usage.json');
@@ -60,7 +62,8 @@ const STATE_FILE = join(__dirname, 'state.json');
 const LOG_FILE = join(__dirname, 'patterns.log');
 const HISTORY_SIZE = 8;
 const SUGGESTION_TTL = 3; // turns a suggestion survives
-const THEME_INTERVAL = 20; // turns between theme changes
+let themeInterval = 20; // turns between theme changes
+let themeRotatedAtTurn = 0; // turn number when theme was last rotated
 
 const DICTIONARY = JSON.parse(readFileSync(join(__dirname, 'words.json'), 'utf-8'));
 
@@ -228,7 +231,8 @@ function buildMessages() {
   const complexity = getComplexity(currentPattern);
   const isComplex = complexity.lines > 15 || complexity.chars > 1000 || complexity.stacks > 3;
 
-  const turnsUntilThemeChange = THEME_INTERVAL - (turnNumber % THEME_INTERVAL);
+  const turnsSinceRotation = turnNumber - themeRotatedAtTurn;
+  const turnsUntilThemeChange = Math.max(1, themeInterval - turnsSinceRotation);
 
   let userMessage = `Turn ${turnNumber + 1}.\nTheme: "${currentTheme}" (changes in ${turnsUntilThemeChange} turns)\n\nCurrent pattern (${complexity.lines} lines, ${complexity.chars} chars, ${complexity.stacks} stack layers):\n\`\`\`\n${currentPattern}\n\`\`\`\n`;
 
@@ -314,10 +318,13 @@ async function generateNextPattern() {
         turnHistory = turnHistory.slice(-HISTORY_SIZE);
       }
 
-      // Rotate theme every N turns
-      if (turnNumber % THEME_INTERVAL === 0) {
+      // Rotate theme every N turns since last rotation
+      if ((turnNumber - themeRotatedAtTurn) >= themeInterval) {
         const oldTheme = currentTheme;
         currentTheme = generateTheme();
+        themeRotatedAtTurn = turnNumber;
+        adminSettings.themeRotatedAtTurn = themeRotatedAtTurn;
+        saveSettings();
         console.log(`[${new Date().toISOString()}] Theme changed: "${oldTheme}" → "${currentTheme}"`);
       }
 
@@ -484,8 +491,21 @@ app.get('/admin', requireAuth, (req, res) => {
 
 <div class="card">
   <h2 style="margin-top:0">Current Theme</h2>
-  <p style="font-size:18px;color:#f0c040;margin:0">"${currentTheme}"</p>
-  <p style="font-size:12px;color:#666;margin-top:8px">Changes every ${THEME_INTERVAL} turns (${THEME_INTERVAL - (turnNumber % THEME_INTERVAL)} turns remaining)</p>
+  <p style="font-size:18px;color:#f0c040;margin:0 0 8px">"${currentTheme}"</p>
+  <p style="font-size:12px;color:#666;margin:0 0 12px">Changes every ${themeInterval} turns (${Math.max(0, themeInterval - (turnNumber - themeRotatedAtTurn))} remaining)</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+    <form method="POST" action="/admin/theme/rotate" style="display:inline"><button type="submit">🎲 Rotate Now</button></form>
+    <form method="POST" action="/admin/theme/set" style="display:flex;gap:8px;align-items:end">
+      <input type="text" name="theme" placeholder="Custom theme words..." style="background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:6px 10px;font-size:13px;width:200px">
+      <button type="submit">Set Theme</button>
+    </form>
+    <form method="POST" action="/admin/theme/pace" style="display:flex;gap:8px;align-items:center">
+      <label style="margin:0;font-size:13px">Every</label>
+      <input type="number" name="interval" value="${themeInterval}" min="1" max="200" style="width:50px;background:#222;color:#eee;border:1px solid #444;border-radius:4px;padding:6px;font-size:13px">
+      <label style="margin:0;font-size:13px">turns</label>
+      <button type="submit">Set Pace</button>
+    </form>
+  </div>
 </div>
 
 <div class="card">
@@ -513,6 +533,40 @@ app.get('/admin', requireAuth, (req, res) => {
 </div>
 
 </body></html>`);
+});
+
+// Theme controls
+app.post('/admin/theme/rotate', requireAuth, (req, res) => {
+  currentTheme = generateTheme();
+  themeRotatedAtTurn = turnNumber;
+  adminSettings.themeRotatedAtTurn = themeRotatedAtTurn;
+  saveSettings();
+  saveState();
+  broadcast('pattern', { code: currentPattern, theme: currentTheme, plan: currentPlan });
+  res.redirect('/admin');
+});
+
+app.post('/admin/theme/set', requireAuth, (req, res) => {
+  const theme = (req.body.theme || '').trim();
+  if (theme) {
+    currentTheme = theme;
+    themeRotatedAtTurn = turnNumber;
+    adminSettings.themeRotatedAtTurn = themeRotatedAtTurn;
+    saveSettings();
+    saveState();
+    broadcast('pattern', { code: currentPattern, theme: currentTheme, plan: currentPlan });
+  }
+  res.redirect('/admin');
+});
+
+app.post('/admin/theme/pace', requireAuth, (req, res) => {
+  const interval = parseInt(req.body.interval);
+  if (interval >= 1 && interval <= 200) {
+    themeInterval = interval;
+    adminSettings.themeInterval = interval;
+    saveSettings();
+  }
+  res.redirect('/admin');
 });
 
 // Admin suggestion (always works regardless of public toggle)

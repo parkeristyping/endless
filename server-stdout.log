@@ -368,3 +368,5 @@ Starting LLM loop (active clients connected)
 [2026-04-05T15:58:46.699Z] Turn 9 — pattern updated (theme: "pride years elements murder bluff", plan: I'll start pulling back from the intense climax to begin tra...)
 Client disconnected (0 active)
 Stopping LLM loop (no active clients)
+Endless Song running at http://localhost:8768
+Endless Song running at http://localhost:8768
