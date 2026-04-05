@@ -2,14 +2,12 @@ const editor = document.getElementById('strudel');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const suggestionsList = document.getElementById('suggestions-list');
-const countdownEl = document.getElementById('countdown');
-const listenersEl = document.getElementById('listeners');
+const themeEl = document.getElementById('theme');
+const planTextEl = document.getElementById('plan-text');
 const splash = document.getElementById('splash');
 const appEl = document.getElementById('app');
 
 let ws;
-let nextUpdateTime = null;
-let countdownInterval = null;
 let started = false;
 let pendingCode = null;
 
@@ -43,14 +41,14 @@ function connect() {
     switch (msg.type) {
       case 'init':
         updatePattern(msg.code);
-        setNextUpdate(msg.nextUpdate);
+        if (msg.theme) themeEl.textContent = msg.theme;
+        if (msg.plan) planTextEl.textContent = msg.plan;
         break;
       case 'pattern':
         updatePattern(msg.code);
+        if (msg.theme) themeEl.textContent = msg.theme;
+        if (msg.plan) planTextEl.textContent = msg.plan;
         clearSuggestions();
-        break;
-      case 'tick':
-        setNextUpdate(msg.nextUpdate);
         break;
     }
   };
@@ -74,8 +72,22 @@ function updatePattern(code) {
 
   // Wait for strudel-editor to be ready
   if (editor.editor) {
+    const previousCode = editor.editor.code;
     editor.editor.setCode(code);
-    editor.editor.evaluate();
+    try {
+      editor.editor.evaluate();
+      editor.editor.start();
+    } catch (e) {
+      console.warn('Pattern eval failed, reverting:', e.message);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'eval_error', error: e.message, code }));
+      }
+      if (previousCode) {
+        editor.editor.setCode(previousCode);
+        editor.editor.evaluate();
+        editor.editor.start();
+      }
+    }
   } else {
     setTimeout(() => updatePattern(code), 500);
   }
@@ -91,19 +103,6 @@ function addSuggestion(text) {
   div.textContent = text;
   suggestionsList.appendChild(div);
   suggestionsList.scrollTop = suggestionsList.scrollHeight;
-}
-
-function setNextUpdate(timestamp) {
-  nextUpdateTime = timestamp;
-  if (countdownInterval) clearInterval(countdownInterval);
-  countdownInterval = setInterval(updateCountdown, 1000);
-  updateCountdown();
-}
-
-function updateCountdown() {
-  if (!nextUpdateTime) return;
-  const remaining = Math.max(0, Math.ceil((nextUpdateTime - Date.now()) / 1000));
-  countdownEl.textContent = `next update in ${remaining}s`;
 }
 
 // Chat form

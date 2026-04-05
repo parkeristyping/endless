@@ -3,23 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Endless Song</title>
+  <title>endless</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="splash" onclick="startAudio()">
     <div class="splash-content">
-      <h1>Endless Song</h1>
+      <h1>endless</h1>
       <p>Click anywhere to begin</p>
     </div>
   </div>
 
   <div id="app" class="hidden">
     <header>
-      <h1>Endless Song</h1>
+      <h1>endless</h1>
       <div id="status">
-        <span id="listeners"></span>
-        <span id="countdown"></span>
+        <span id="theme"></span>
       </div>
     </header>
 
@@ -39,6 +38,10 @@
       </div>
 
       <div id="chat-panel">
+        <div id="plan-section">
+          <h2>Plan</h2>
+          <p id="plan-text"></p>
+        </div>
         <div id="chat-header">
           <h2>Suggest</h2>
           <p class="hint">How should the song evolve? Your suggestions influence the next update.</p>
